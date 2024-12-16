@@ -1,0 +1,16 @@
+{
+  "name": "com.listen.AnalysisTool",
+  "displayName": "AnalysisTool",
+  "version": "0.0.1",
+  "description": "",
+  "unity": "2021.3",
+  "author":{
+    "name": "Listen"
+  },
+  "category": [
+    "game",
+    "tool",
+    "analysis"
+  ],
+  "type": "library"
+}
