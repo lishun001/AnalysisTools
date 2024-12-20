@@ -6,7 +6,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-namespace AnalysisTools.Editor
+namespace AnalysisTools
 {
     public class HookUtils
     {
@@ -22,7 +22,7 @@ namespace AnalysisTools.Editor
                 return;
             }
 
-            // Debug.LogError($"Begin....{name} {hookType}");
+            Debug.LogError($"Begin....{name} {hookType}");
             switch (hookType)
             {
                 case "AnalysisTools.ProfilerSampleAttribute":
@@ -41,7 +41,7 @@ namespace AnalysisTools.Editor
                 return;
             }
 
-            // Debug.LogError($"End....{name} {hookType}");
+            Debug.LogError($"End....{name} {hookType}");
 
             switch (hookType)
             {
