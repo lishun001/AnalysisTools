@@ -9,9 +9,6 @@ public class Sam
         int a = 10;
         // Debug.LogError(a);
         Debug.LogError("Test...");
+        
     }
-    
-    
-    
-    
 }

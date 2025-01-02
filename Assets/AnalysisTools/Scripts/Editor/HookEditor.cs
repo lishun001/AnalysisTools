@@ -5,7 +5,6 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using System.Linq;
-using UnityEditor.Callbacks;
 using System.Collections.Generic;
 
 namespace AnalysisTools.Editor
@@ -41,41 +40,15 @@ namespace AnalysisTools.Editor
         }
 
         #endregion
-
-        #region Post Process Callbacks
-
-#if INJECT_SAMPLE
-        [PostProcessScene]
-        private static void PostProcessSample()
-        {
-            ProcessInjection(typeof(ProfilerSampleAttribute));
-        }
-#endif
-
-#if INJECT_FUNC
-        [PostProcessScene]
-        private static void PostProcessFunc()
-        {
-            ProcessInjection(typeof(AnalysisAllAttribute));
-        }
-#endif
-
-        [UnityEditor.Callbacks.DidReloadScripts]
-        private static void Test()
-        {
-            // Debug.LogError(">>>>");
-            // ProcessInjection(typeof(AnalysisAllAttribute));
-        }
         
-        #endregion
 
         #region Core Injection Logic
 
-        public static void ProcessInjection(Type hookType)
+        public static void ProcessInjection(Type hookType, bool isBuild = false)
         {
             Debug.Log($"{LOG_PREFIX}开始注入处理 - Hook类型: {hookType.Name}");
             
-            if (Application.isPlaying || EditorApplication.isCompiling)
+            if (Application.isPlaying)
             {
                 Debug.Log("正在运行或编译中，无法进行注入处理");
                 return;
@@ -87,7 +60,7 @@ namespace AnalysisTools.Editor
             {
                 using var assemblyResolver = CreateAssemblyResolver();
                 var (readerParams, writerParams) = CreateParameters(assemblyResolver);
-                var paths = LoadInjectionPaths();
+                var paths = LoadInjectionPaths(isBuild);
 
                 ProcessAssemblies(paths, readerParams, writerParams, hookType);
             }
@@ -148,20 +121,20 @@ namespace AnalysisTools.Editor
             return (
                 new ReaderParameters
                 {
-                    ReadSymbols = true,
+                    ReadSymbols = false,
                     ReadWrite = true,
                     AssemblyResolver = resolver,
-                    SymbolReaderProvider = new Mono.Cecil.Pdb.PdbReaderProvider()
+                    // SymbolReaderProvider = new Mono.Cecil.Pdb.PdbReaderProvider()
                 },
                 new WriterParameters
                 {
-                    WriteSymbols = true,
-                    SymbolWriterProvider = new Mono.Cecil.Pdb.PdbWriterProvider()
+                    WriteSymbols = false,
+                    // SymbolWriterProvider = new Mono.Cecil.Pdb.PdbWriterProvider()
                 }
             );
         }
 
-        private static List<string> LoadInjectionPaths()
+        private static List<string> LoadInjectionPaths(bool isBuild)
         {
             var pathsAsset = Resources.Load<TextAsset>(INJECT_PATHS);
             if (pathsAsset == null)
@@ -170,6 +143,11 @@ namespace AnalysisTools.Editor
             }
 
             var pathsData = JsonUtility.FromJson<PathsData>(pathsAsset.text);
+            if (isBuild)
+            {
+                return pathsData.build_paths ?? new List<string>();
+            }
+            
             return pathsData.paths ?? new List<string>();
         }
 

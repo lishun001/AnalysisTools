@@ -1,5 +1,8 @@
 {
   "paths": [
     "/../Library/ScriptAssemblies/Assembly-CSharp.dll"
+  ],
+  "build_paths": [
+    "/../Temp/StagingArea/Data/Managed/Assembly-CSharp.dll"
   ]
 }
