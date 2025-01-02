@@ -1,33 +1,22 @@
-// using UnityEditor;
-// using UnityEditor.Android;
-// using UnityEditor.Build;
-// using UnityEditor.Build.Reporting;
-// using UnityEditor.UnityLinker;
-// using UnityEngine;
-//
-// namespace AnalysisTools.Editor
-// {
-//     public class BuildPostProcessor : IPostGenerateGradleAndroidProject, IPostBuildPlayerScriptDLLs, IPostprocessBuildWithReport, IPreprocessBuildWithReport
-//     {
-//         public int callbackOrder { get; }
-//         public void OnPreprocessBuild(BuildReport report)
-//         {
-//             HookEditor.ProcessInjection(typeof(AnalysisAllAttribute));
-//         }
-//
-//         public void OnPostprocessBuild(BuildReport report)
-//         {
-//             HookEditor.ProcessInjection(typeof(AnalysisAllAttribute));
-//         }
-//
-//         public void OnPostBuildPlayerScriptDLLs(BuildReport report)
-//         {
-//             HookEditor.ProcessInjection(typeof(AnalysisAllAttribute));
-//         }
-//
-//         public void OnPostGenerateGradleAndroidProject(string path)
-//         {
-//             HookEditor.ProcessInjection(typeof(AnalysisAllAttribute));
-//         }
-//     }
-// }
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
+
+namespace AnalysisTools.Editor
+{
+    public class BuildPostProcessor: IPostBuildPlayerScriptDLLs
+    {
+        public void OnPostBuildPlayerScriptDLLs(BuildReport report)
+        {
+#if INJECT_FUNC
+            HookEditor.ProcessInjection(typeof(AnalysisAllAttribute), true);
+#endif
+            
+#if INJECT_SAMPLE
+            HookEditor.ProcessInjection(typeof(ProfilerSampleAttribute), true);
+#endif
+            
+        }
+
+        public int callbackOrder { get; }
+    }
+}
