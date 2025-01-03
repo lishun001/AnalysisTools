@@ -11,7 +11,7 @@ public class MainTest : MonoBehaviour
     private void Awake()
     {
         btnReport.onClick.AddListener(HookUtils.ExportMethodAnalysisCSV);
-        Sam.TestBB();
+        Sam.TestBB(Sam.State.State3);
     }
     
     

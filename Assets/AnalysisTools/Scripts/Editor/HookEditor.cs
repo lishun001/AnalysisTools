@@ -41,7 +41,6 @@ namespace AnalysisTools.Editor
 
         #endregion
         
-
         #region Core Injection Logic
 
         public static void ProcessInjection(Type hookType, bool isBuild = false)
@@ -79,7 +78,6 @@ namespace AnalysisTools.Editor
         {
             var resolver = new DefaultAssemblyResolver();
 
-            // 添加程序集搜索路径
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (!string.IsNullOrEmpty(assembly.Location))
@@ -88,17 +86,13 @@ namespace AnalysisTools.Editor
                 }
             }
 
-            // 添加Unity托管库路径
             string unityManagedPath = null;
 
-            Debug.Log(Environment.OSVersion.Platform);
             if (Environment.OSVersion.Platform == PlatformID.MacOSX || Environment.OSVersion.Platform == PlatformID.Unix)
             {
                 unityManagedPath = Path.GetDirectoryName(EditorApplication.applicationPath) + "/Unity.app/Contents/Managed";
             }
-            else if (Environment.OSVersion.Platform == PlatformID.Win32S ||
-                     Environment.OSVersion.Platform == PlatformID.Win32Windows ||
-                     Environment.OSVersion.Platform == PlatformID.Win32NT)
+            else if (Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
                 unityManagedPath = Path.GetDirectoryName(EditorApplication.applicationPath) + "/Data/Managed";
             }
@@ -115,7 +109,6 @@ namespace AnalysisTools.Editor
             return resolver;
         }
         
-
         private static (ReaderParameters, WriterParameters) CreateParameters(IAssemblyResolver resolver)
         {
             return (
@@ -124,12 +117,10 @@ namespace AnalysisTools.Editor
                     ReadSymbols = false,
                     ReadWrite = true,
                     AssemblyResolver = resolver,
-                    // SymbolReaderProvider = new Mono.Cecil.Pdb.PdbReaderProvider()
                 },
                 new WriterParameters
                 {
                     WriteSymbols = false,
-                    // SymbolWriterProvider = new Mono.Cecil.Pdb.PdbWriterProvider()
                 }
             );
         }
@@ -143,12 +134,7 @@ namespace AnalysisTools.Editor
             }
 
             var pathsData = JsonUtility.FromJson<PathsData>(pathsAsset.text);
-            if (isBuild)
-            {
-                return pathsData.build_paths ?? new List<string>();
-            }
-            
-            return pathsData.paths ?? new List<string>();
+            return isBuild ? pathsData.build_paths ?? new List<string>() : pathsData.paths ?? new List<string>();
         }
 
         private static void ProcessAssemblies(
@@ -259,20 +245,21 @@ namespace AnalysisTools.Editor
             Type hookType)
         {
             var beginMethod = module.ImportReference(
-                typeof(HookUtils).GetMethod("Begin", new[] {typeof(string), typeof(string)}));
+                typeof(HookUtils).GetMethod("Begin", new[] { typeof(string), typeof(string) }));
             var endMethod = module.ImportReference(
-                typeof(HookUtils).GetMethod("End", new[] {typeof(string), typeof(string)}));
+                typeof(HookUtils).GetMethod("End", new[] { typeof(string), typeof(string) }));
 
             var processor = method.Body.GetILProcessor();
             var methodId = $"[{type.FullName}.{method.Name}]-[{GetParamsStr(method)}]";
 
-            // 注入开始代码
             InjectStartCode(processor, method, methodId, hookType, beginMethod);
-
-            // 注入结束代码
             InjectEndCode(processor, method, methodId, hookType, endMethod);
 
-            // 更新偏移量
+            if (method.Body.ExceptionHandlers.Count > 0)
+            {
+                ProcessExceptionHandlers(processor, method, methodId, hookType, endMethod);
+            }
+
             ComputeOffsets(method.Body);
         }
 
@@ -296,19 +283,34 @@ namespace AnalysisTools.Editor
             Type hookType,
             MethodReference endMethod)
         {
-            var last = method.Body.Instructions[^1];
-            var endBlock = Instruction.Create(OpCodes.Ldstr, methodId);
-
-            processor.InsertBefore(last, endBlock);
-            processor.InsertBefore(last, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
-            processor.InsertBefore(last, Instruction.Create(OpCodes.Call, endMethod));
-
-            // 更新跳转指令
-            foreach (var instruction in method.Body.Instructions)
+            var instructions = method.Body.Instructions.ToList();
+            foreach (var instruction in instructions)
             {
-                if (instruction.Operand == last)
+                if (instruction.OpCode == OpCodes.Ret)
                 {
-                    instruction.Operand = endBlock;
+                    var endBlock = Instruction.Create(OpCodes.Ldstr, methodId);
+                    processor.InsertBefore(instruction, endBlock);
+                    processor.InsertBefore(instruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
+                    processor.InsertBefore(instruction, Instruction.Create(OpCodes.Call, endMethod));
+                }
+            }
+        }
+
+        private static void ProcessExceptionHandlers(
+            ILProcessor processor,
+            MethodDefinition method,
+            string methodId,
+            Type hookType,
+            MethodReference endMethod)
+        {
+            foreach (var handler in method.Body.ExceptionHandlers)
+            {
+                if (handler.HandlerType == ExceptionHandlerType.Finally)
+                {
+                    var leaveInstruction = handler.HandlerEnd.Previous;
+                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Ldstr, methodId));
+                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
+                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Call, endMethod));
                 }
             }
         }
