@@ -1,7 +1,7 @@
 {
-  "name": "com.listen.AnalysisTools",
+  "name": "com.listen.analysis-tools",
   "displayName": "AnalysisTools",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "",
   "unity": "2021.3",
   "author":{
