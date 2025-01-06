@@ -259,23 +259,28 @@ namespace AnalysisTools.Editor
             TypeDefinition type,
             Type hookType)
         {
-            var beginMethod = module.ImportReference(
-                typeof(HookUtils).GetMethod("Begin", new[] { typeof(string), typeof(string) }));
-            var endMethod = module.ImportReference(
-                typeof(HookUtils).GetMethod("End", new[] { typeof(string), typeof(string) }));
+            try
+            {
+                var beginMethod = module.ImportReference(
+                    typeof(HookUtils).GetMethod("Begin", new[] { typeof(string), typeof(string) }));
+                var endMethod = module.ImportReference(
+                    typeof(HookUtils).GetMethod("End", new[] { typeof(string), typeof(string) }));
 
-            var processor = method.Body.GetILProcessor();
-            var methodId = $"[{type.FullName}.{method.Name}]-[{GetParamsStr(method)}]";
+                var processor = method.Body.GetILProcessor();
+                var methodId = $"[{type.FullName}.{method.Name}]-[{GetParamsStr(method)}]";
 
-            InjectStartCode(processor, method, methodId, hookType, beginMethod);
-            InjectEndCode(processor, method, methodId, hookType, endMethod);
-
-            // if (method.Body.ExceptionHandlers.Count > 0)
-            // {
-            //     ProcessExceptionHandlers(processor, method, methodId, hookType, endMethod);
-            // }
-
-            // ComputeOffsets(method.Body);
+                InjectStartCode(processor, method, methodId, hookType, beginMethod);
+                InjectEndCode(processor, method, methodId, hookType, endMethod);
+                
+                method.Body.OptimizeMacros();
+                
+                Debug.Log($"方法注入成功：{method.FullName}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"方法注入失败：{method.FullName} :{e.Message}");
+                throw;
+            }
         }
         
 
