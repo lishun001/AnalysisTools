@@ -81,9 +81,18 @@ namespace AnalysisTools.Editor
 
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if (!string.IsNullOrEmpty(assembly.Location))
+                string location = null;
+                try
                 {
-                    resolver.AddSearchDirectory(Path.GetDirectoryName(assembly.Location));
+                    location = assembly.Location;
+                }
+                catch (Exception e)
+                {
+                    location = null;
+                }
+                if (!string.IsNullOrEmpty(location))
+                {
+                    resolver.AddSearchDirectory(Path.GetDirectoryName(location));
                 }
             }
 
