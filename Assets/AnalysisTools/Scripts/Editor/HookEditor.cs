@@ -6,6 +6,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 using System.Collections.Generic;
+using Mono.Cecil.Rocks;
 
 namespace AnalysisTools.Editor
 {
@@ -274,8 +275,9 @@ namespace AnalysisTools.Editor
             //     ProcessExceptionHandlers(processor, method, methodId, hookType, endMethod);
             // }
 
-            ComputeOffsets(method.Body);
+            // ComputeOffsets(method.Body);
         }
+        
 
         private static void InjectStartCode(
             ILProcessor processor,
@@ -288,6 +290,10 @@ namespace AnalysisTools.Editor
             processor.InsertBefore(first, Instruction.Create(OpCodes.Ldstr, methodId));
             processor.InsertBefore(first, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
             processor.InsertBefore(first, Instruction.Create(OpCodes.Call, beginMethod));
+            
+            // 重新计算所有指令的偏移量
+            method.Body.OptimizeMacros();
+            ComputeOffsets(method.Body);
         }
 
         private static void InjectEndCode(
@@ -326,16 +332,26 @@ namespace AnalysisTools.Editor
                     processor.InsertBefore(exitPoint, instruction);
                 }
             }
+            
+            // 重新计算所有指令的偏移量
+            method.Body.OptimizeMacros();
+            ComputeOffsets(method.Body);
         }
 
         private static void ComputeOffsets(MethodBody body)
         {
+            // 确保所有指令的序列是正确的
+            body.SimplifyMacros();
+    
             int offset = 0;
             foreach (var instruction in body.Instructions)
             {
                 instruction.Offset = offset;
                 offset += instruction.GetSize();
             }
+    
+            // 重新优化指令
+            body.OptimizeMacros();
         }
 
         private static string GetParamsStr(MethodDefinition method)
