@@ -120,7 +120,7 @@ namespace AnalysisTools
                     //过滤调用次数0的函数
                     if (tmp.FuncCalls <= 0) continue;
                     StringBuilder sb = new StringBuilder();
-                    sb.AppendFormat("{0},", tmp.FuncName);
+                    sb.AppendFormat("{0},", ReplaceComma(tmp.FuncName));
                     sb.AppendFormat("{0:f4},", tmp.FuncTotalMemory / (tmp.FuncCalls * 1024.0));
                     sb.AppendFormat("{0},", tmp.FuncTotalTime / tmp.FuncCalls * 1000);
                     sb.AppendFormat("{0}", tmp.FuncCalls);
@@ -132,6 +132,12 @@ namespace AnalysisTools
             }
 
             Debug.Log($"函数性能报告{fileCSVName}文件输出完成");
+        }
+        
+        // 把字符串中的逗号替换为分号
+        public static string ReplaceComma(string str)
+        {
+            return str.Replace(",", ";");
         }
     }
 }
