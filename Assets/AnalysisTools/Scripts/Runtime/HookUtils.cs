@@ -22,7 +22,7 @@ namespace AnalysisTools
                 return;
             }
 
-            Debug.LogError($"Begin....{name} {hookType}");
+            // Debug.LogError($"Begin....{name} {hookType}");
             switch (hookType)
             {
                 case "AnalysisTools.ProfilerSampleAttribute":
@@ -41,7 +41,7 @@ namespace AnalysisTools
                 return;
             }
 
-            Debug.LogError($"End....{name} {hookType}");
+            // Debug.LogError($"End....{name} {hookType}");
 
             switch (hookType)
             {
@@ -121,8 +121,8 @@ namespace AnalysisTools
                     if (tmp.FuncCalls <= 0) continue;
                     StringBuilder sb = new StringBuilder();
                     sb.AppendFormat("{0},", ReplaceComma(tmp.FuncName));
-                    sb.AppendFormat("{0:f4},", tmp.FuncTotalMemory / (tmp.FuncCalls * 1024.0));
-                    sb.AppendFormat("{0},", tmp.FuncTotalTime / tmp.FuncCalls * 1000);
+                    sb.AppendFormat("{0:f3},", tmp.FuncTotalMemory / (tmp.FuncCalls * 1024.0));
+                    sb.AppendFormat("{0:f3},", tmp.FuncTotalTime / tmp.FuncCalls * 1000);
                     sb.AppendFormat("{0}", tmp.FuncCalls);
                     sw.WriteLine(sb);
                 }
