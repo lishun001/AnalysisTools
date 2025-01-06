@@ -229,7 +229,21 @@ namespace AnalysisTools.Editor
                    method.IsAbstract ||
                    method.IsVirtual ||
                    method.IsGetter ||
-                   method.IsSetter;
+                   method.IsSetter ||
+                   IsUnityLoopMethod(method.Name);
+        }
+        
+        private static bool IsUnityLoopMethod(string methodName)
+        {
+            // Unity常见的轮询方法名称
+            return methodName switch
+            {
+                "Update" => true,
+                "LateUpdate" => true,
+                "FixedUpdate" => true,
+                "OnGUI" => true,
+                _ => false
+            };
         }
 
         private static bool ShouldProcessMethod(MethodDefinition method, Type hookType)
@@ -255,10 +269,10 @@ namespace AnalysisTools.Editor
             InjectStartCode(processor, method, methodId, hookType, beginMethod);
             InjectEndCode(processor, method, methodId, hookType, endMethod);
 
-            if (method.Body.ExceptionHandlers.Count > 0)
-            {
-                ProcessExceptionHandlers(processor, method, methodId, hookType, endMethod);
-            }
+            // if (method.Body.ExceptionHandlers.Count > 0)
+            // {
+            //     ProcessExceptionHandlers(processor, method, methodId, hookType, endMethod);
+            // }
 
             ComputeOffsets(method.Body);
         }
@@ -283,15 +297,57 @@ namespace AnalysisTools.Editor
             Type hookType,
             MethodReference endMethod)
         {
-            var instructions = method.Body.Instructions.ToList();
-            foreach (var instruction in instructions)
+            // 找到所有return指令
+            var returnInstructions = method.Body.Instructions
+                .Where(i => i.OpCode == OpCodes.Ret)
+                .ToList();
+
+            // 为每个return指令注入结束代码
+            foreach (var returnInstruction in returnInstructions)
             {
-                if (instruction.OpCode == OpCodes.Ret)
+                // 创建结束代码指令
+                var endInstructions = new[]
                 {
-                    var endBlock = Instruction.Create(OpCodes.Ldstr, methodId);
-                    processor.InsertBefore(instruction, endBlock);
-                    processor.InsertBefore(instruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
-                    processor.InsertBefore(instruction, Instruction.Create(OpCodes.Call, endMethod));
+                    Instruction.Create(OpCodes.Ldstr, methodId),
+                    Instruction.Create(OpCodes.Ldstr, hookType.FullName),
+                    Instruction.Create(OpCodes.Call, endMethod)
+                };
+
+                // 如果return指令前面是一个leave.s或leave指令，
+                // 我们需要在leave指令之前插入结束代码
+                var prev = returnInstruction.Previous;
+                if (prev != null && (prev.OpCode == OpCodes.Leave || prev.OpCode == OpCodes.Leave_S))
+                {
+                    foreach (var instruction in endInstructions)
+                    {
+                        processor.InsertBefore(prev, instruction);
+                    }
+                }
+                else
+                {
+                    // 否则在return指令前插入
+                    foreach (var instruction in endInstructions)
+                    {
+                        processor.InsertBefore(returnInstruction, instruction);
+                    }
+                }
+            }
+
+            // 处理异常处理程序
+            if (method.Body.HasExceptionHandlers)
+            {
+                foreach (var handler in method.Body.ExceptionHandlers)
+                {
+                    if (handler.HandlerEnd != null && handler.HandlerEnd.Previous != null)
+                    {
+                        var lastInstruction = handler.HandlerEnd.Previous;
+                        if (lastInstruction.OpCode == OpCodes.Leave || lastInstruction.OpCode == OpCodes.Leave_S)
+                        {
+                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Ldstr, methodId));
+                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
+                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Call, endMethod));
+                        }
+                    }
                 }
             }
         }
