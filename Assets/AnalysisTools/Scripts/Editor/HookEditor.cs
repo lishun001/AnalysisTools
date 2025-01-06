@@ -309,15 +309,6 @@ namespace AnalysisTools.Editor
                 }
             }
 
-            // 添加所有leave和leave.s指令
-            foreach (var instruction in method.Body.Instructions)
-            {
-                if (instruction.OpCode == OpCodes.Leave || instruction.OpCode == OpCodes.Leave_S)
-                {
-                    exitPoints.Add(instruction);
-                }
-            }
-
             // 收集所有分支结束点前的指令
             foreach (var exitPoint in exitPoints)
             {
@@ -333,66 +324,6 @@ namespace AnalysisTools.Editor
                 foreach (var instruction in endInstructions)
                 {
                     processor.InsertBefore(exitPoint, instruction);
-                }
-            }
-
-            // 处理异常处理程序
-            if (method.Body.HasExceptionHandlers)
-            {
-                foreach (var handler in method.Body.ExceptionHandlers)
-                {
-                    // 确保异常处理块结束点存在且有前一条指令
-                    if (handler.HandlerEnd != null && handler.HandlerEnd.Previous != null)
-                    {
-                        var lastInstruction = handler.HandlerEnd.Previous;
-                
-                        // 只在还没有注入结束代码的地方注入
-                        if (!IsEndCodeInjected(lastInstruction, endMethod))
-                        {
-                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Ldstr, methodId));
-                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
-                            processor.InsertBefore(lastInstruction, Instruction.Create(OpCodes.Call, endMethod));
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 辅助方法：检查是否已经注入了结束代码
-        private static bool IsEndCodeInjected(Instruction instruction, MethodReference endMethod)
-        {
-            var current = instruction;
-            int checkCount = 0;
-            const int MAX_CHECK = 3; // 检查前3条指令
-
-            while (current != null && checkCount < MAX_CHECK)
-            {
-                if (current.OpCode == OpCodes.Call && current.Operand is MethodReference methodRef && 
-                    methodRef.FullName == endMethod.FullName)
-                {
-                    return true;
-                }
-                current = current.Previous;
-                checkCount++;
-            }
-            return false;
-        }
-
-        private static void ProcessExceptionHandlers(
-            ILProcessor processor,
-            MethodDefinition method,
-            string methodId,
-            Type hookType,
-            MethodReference endMethod)
-        {
-            foreach (var handler in method.Body.ExceptionHandlers)
-            {
-                if (handler.HandlerType == ExceptionHandlerType.Finally)
-                {
-                    var leaveInstruction = handler.HandlerEnd.Previous;
-                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Ldstr, methodId));
-                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
-                    processor.InsertBefore(leaveInstruction, Instruction.Create(OpCodes.Call, endMethod));
                 }
             }
         }
