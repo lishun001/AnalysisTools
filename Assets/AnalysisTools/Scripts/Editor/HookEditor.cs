@@ -58,9 +58,9 @@ namespace AnalysisTools.Editor
 
             try
             {
-                using var assemblyResolver = CreateAssemblyResolver();
-                var (readerParams, writerParams) = CreateParameters(assemblyResolver);
-                var paths = LoadInjectionPaths(isBuild);
+                using DefaultAssemblyResolver assemblyResolver = CreateAssemblyResolver();
+                (ReaderParameters readerParams, WriterParameters writerParams) = CreateParameters(assemblyResolver);
+                List<string> paths = LoadInjectionPaths(isBuild);
 
                 ProcessAssemblies(paths, readerParams, writerParams, hookType);
             }
@@ -75,6 +75,10 @@ namespace AnalysisTools.Editor
             }
         }
 
+        /// <summary>
+        /// 创建解析器
+        /// </summary>
+        /// <returns></returns>
         private static DefaultAssemblyResolver CreateAssemblyResolver()
         {
             var resolver = new DefaultAssemblyResolver();
@@ -119,13 +123,18 @@ namespace AnalysisTools.Editor
             return resolver;
         }
         
+        /// <summary>
+        /// 创建读写参数
+        /// </summary>
+        /// <param name="resolver"></param>
+        /// <returns></returns>
         private static (ReaderParameters, WriterParameters) CreateParameters(IAssemblyResolver resolver)
         {
             return (
                 new ReaderParameters
                 {
                     ReadSymbols = false,
-                    ReadWrite = true,
+                    ReadWrite = true,   // 如需覆盖当前修改的程序集，必须设置为true
                     AssemblyResolver = resolver,
                 },
                 new WriterParameters
@@ -135,6 +144,12 @@ namespace AnalysisTools.Editor
             );
         }
 
+        /// <summary>
+        /// 加载程序集路径
+        /// </summary>
+        /// <param name="isBuild"></param>
+        /// <returns></returns>
+        /// <exception cref="FileNotFoundException"></exception>
         private static List<string> LoadInjectionPaths(bool isBuild)
         {
             var pathsAsset = Resources.Load<TextAsset>(INJECT_PATHS);
@@ -147,6 +162,13 @@ namespace AnalysisTools.Editor
             return isBuild ? pathsData.build_paths ?? new List<string>() : pathsData.paths ?? new List<string>();
         }
 
+        /// <summary>
+        /// 处理所有程序集
+        /// </summary>
+        /// <param name="paths"></param>
+        /// <param name="readerParams"></param>
+        /// <param name="writerParams"></param>
+        /// <param name="hookType"></param>
         private static void ProcessAssemblies(
             List<string> paths,
             ReaderParameters readerParams,
@@ -160,6 +182,13 @@ namespace AnalysisTools.Editor
             }
         }
 
+        /// <summary>
+        /// 处理单个程序集
+        /// </summary>
+        /// <param name="assemblyPath"></param>
+        /// <param name="readerParams"></param>
+        /// <param name="writerParams"></param>
+        /// <param name="hookType"></param>
         private static void ProcessSingleAssembly(
             string assemblyPath,
             ReaderParameters readerParams,
@@ -170,8 +199,37 @@ namespace AnalysisTools.Editor
 
             try
             {
-                var assembly = AssemblyDefinition.ReadAssembly(assemblyPath, readerParams);
-                if (ProcessAssembly(assembly, hookType))
+                // 加载程序集
+                AssemblyDefinition assembly = AssemblyDefinition.ReadAssembly(assemblyPath, readerParams);
+                bool wasProcessed = false;
+
+                foreach (ModuleDefinition module in assembly.Modules)
+                {
+                    foreach (TypeDefinition type in module.Types)
+                    {
+                        if (ShouldSkipType(type))
+                        {
+                            continue;
+                        }
+
+                        foreach (var method in type.Methods)
+                        {
+                            if (ShouldSkipMethod(method))
+                            {
+                                continue;
+                            }
+                            if (!ShouldProcessMethod(method, hookType))
+                            {
+                                continue;
+                            }
+
+                            InjectCode(method, module, type, hookType);
+                            wasProcessed = true;
+                        }
+                    }
+                }
+                
+                if (wasProcessed)
                 {
                     assembly.Write(writerParams);
                     assembly.Dispose();
@@ -191,47 +249,25 @@ namespace AnalysisTools.Editor
         #endregion
 
         #region Assembly Processing
-
-        private static bool ProcessAssembly(AssemblyDefinition assembly, Type hookType)
-        {
-            bool wasProcessed = false;
-
-            foreach (var module in assembly.Modules)
-            {
-                foreach (var type in module.Types)
-                {
-                    if (ShouldSkipType(type)) continue;
-                    wasProcessed |= ProcessType(type, module, hookType);
-                }
-            }
-
-            return wasProcessed;
-        }
-
+        
+        /// <summary>
+        /// 跳过的类型
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
         private static bool ShouldSkipType(TypeDefinition type)
         {
-            return type.Name == nameof(HookUtils) ||
-                   type.Name == nameof(HookEditor) ||
+            return type.Namespace == typeof(HookUtils).Namespace ||
+                   type.Namespace == typeof(HookEditor).Namespace ||
                    type.IsAbstract ||
                    type.IsInterface;
         }
 
-        private static bool ProcessType(TypeDefinition type, ModuleDefinition module, Type hookType)
-        {
-            bool wasProcessed = false;
-
-            foreach (var method in type.Methods)
-            {
-                if (ShouldSkipMethod(method)) continue;
-                if (!ShouldProcessMethod(method, hookType)) continue;
-
-                InjectCode(method, module, type, hookType);
-                wasProcessed = true;
-            }
-
-            return wasProcessed;
-        }
-
+        /// <summary>
+        /// 跳过的方法
+        /// </summary>
+        /// <param name="method"></param>
+        /// <returns></returns>
         private static bool ShouldSkipMethod(MethodDefinition method)
         {
             return method.Name == ".ctor" ||
@@ -243,6 +279,11 @@ namespace AnalysisTools.Editor
                    IsUnityLoopMethod(method.Name);
         }
         
+        /// <summary>
+        /// unity的轮询方法
+        /// </summary>
+        /// <param name="methodName"></param>
+        /// <returns></returns>
         private static bool IsUnityLoopMethod(string methodName)
         {
             // Unity常见的轮询方法名称
@@ -256,12 +297,25 @@ namespace AnalysisTools.Editor
             };
         }
 
+        /// <summary>
+        /// 根据hookType判断是否注入
+        /// </summary>
+        /// <param name="method"></param>
+        /// <param name="hookType"></param>
+        /// <returns></returns>
         private static bool ShouldProcessMethod(MethodDefinition method, Type hookType)
         {
             return hookType == typeof(AnalysisAllAttribute) ||
                    method.CustomAttributes.Any(attr => attr.AttributeType.FullName == hookType.FullName);
         }
 
+        /// <summary>
+        /// 注入代码
+        /// </summary>
+        /// <param name="method"></param>
+        /// <param name="module"></param>
+        /// <param name="type"></param>
+        /// <param name="hookType"></param>
         private static void InjectCode(
             MethodDefinition method,
             ModuleDefinition module,
@@ -270,13 +324,15 @@ namespace AnalysisTools.Editor
         {
             try
             {
-                var beginMethod = module.ImportReference(
+                // 导入类型，并获取方法
+                MethodReference beginMethod = module.ImportReference(
                     typeof(HookUtils).GetMethod("Begin", new[] { typeof(string), typeof(string) }));
-                var endMethod = module.ImportReference(
+                MethodReference endMethod = module.ImportReference(
                     typeof(HookUtils).GetMethod("End", new[] { typeof(string), typeof(string) }));
 
-                var processor = method.Body.GetILProcessor();
-                var methodId = $"[{type.FullName}.{method.Name}]-[{GetParamsStr(method)}]";
+                // il指令处理器
+                ILProcessor processor = method.Body.GetILProcessor();
+                string methodId = $"[{type.FullName}.{method.Name}]-[{GetParamsStr(method)}]";
 
                 InjectStartCode(processor, method, methodId, hookType, beginMethod);
                 InjectEndCode(processor, method, methodId, hookType, endMethod);
@@ -305,9 +361,8 @@ namespace AnalysisTools.Editor
             processor.InsertBefore(first, Instruction.Create(OpCodes.Ldstr, hookType.FullName));
             processor.InsertBefore(first, Instruction.Create(OpCodes.Call, beginMethod));
             
-            // 重新计算所有指令的偏移量
+            // 优化il指令，重新计算所有指令的偏移量
             method.Body.OptimizeMacros();
-            ComputeOffsets(method.Body);
         }
 
         private static void InjectEndCode(
@@ -347,26 +402,10 @@ namespace AnalysisTools.Editor
                 }
             }
             
-            // 重新计算所有指令的偏移量
+            // 优化il指令，重新计算所有指令的偏移量
             method.Body.OptimizeMacros();
-            ComputeOffsets(method.Body);
         }
-
-        private static void ComputeOffsets(MethodBody body)
-        {
-            // 确保所有指令的序列是正确的
-            body.SimplifyMacros();
-    
-            int offset = 0;
-            foreach (var instruction in body.Instructions)
-            {
-                instruction.Offset = offset;
-                offset += instruction.GetSize();
-            }
-    
-            // 重新优化指令
-            body.OptimizeMacros();
-        }
+        
 
         private static string GetParamsStr(MethodDefinition method)
         {

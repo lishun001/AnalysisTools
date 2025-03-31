@@ -11,8 +11,19 @@ public class MainTest : MonoBehaviour
     private void Awake()
     {
         btnReport.onClick.AddListener(HookUtils.ExportMethodAnalysisCSV);
-        Sam.TestBB(Sam.State.State3);
+    }
+
+    [ProfilerSample]
+    public void Ruguo()
+    {
+        byte[] arr = new Byte[1024];
     }
     
-    
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.A))
+        {
+            Ruguo();
+        }
+    }
 }
